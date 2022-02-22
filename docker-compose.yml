@@ -1,0 +1,52 @@
+version: "3"
+
+services:
+  db:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_USER=core
+      - POSTGRES_PASSWORD=12345
+      - POSTGRES_DB=core
+    ports:
+      - 5434:5432
+
+  redis:
+    image: redis:5-alpine
+    ports:
+      - 6377:6379
+
+  worker:
+    build: .
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./src:/app/src
+    command: bash -c "cd src/ && celery -A core.settings.celery worker -l info"
+    env_file:
+      - .env
+
+  flower:
+    image: mher/flower
+    environment:
+      - CELERY_BROKER_URL=amqp://myuser:mypass@rabbitmq:5672/myvhost
+      - FLOWER_PORT=8888
+    ports:
+      - 5555:8888
+    depends_on:
+      - worker
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./src:/app/src
+    command: bash -c "cd src && ./manage.py runserver 0.0.0.0:8000"
+    ports:
+      - 8080:8000
+    env_file:
+      - .env
